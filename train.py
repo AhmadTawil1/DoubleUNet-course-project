@@ -1,4 +1,4 @@
-
+# Import required libraries
 import os
 import random
 import time
@@ -18,34 +18,50 @@ from model import build_doubleunet
 from metrics import DiceLoss, DiceBCELoss
 
 def load_data(path):
+    """
+    Load and organize dataset into train, validation, and test sets
+    Args:
+        path: Path to the dataset directory
+    Returns:
+        Tuple of (train_data, valid_data, test_data) where each is a tuple of (images, masks)
+    """
     def get_data(path, name):
+        """
+        Get image and mask paths for a specific dataset split
+        Args:
+            path: Base path to dataset
+            name: Name of the dataset split
+        Returns:
+            Tuple of (image_paths, mask_paths)
+        """
         images = sorted(glob(os.path.join(path, name, "images", "*.jpg")))
         labels = sorted(glob(os.path.join(path, name, "masks", "liver", "*.jpg")))
         return images, labels
 
-    """ Names """
+    # Define dataset splits
     dirs = sorted(os.listdir(path))
     test_names = [f"liver_{i}" for i in range(0, 30, 1)]
     valid_names = [f"liver_{i}" for i in range(30, 60, 1)]
 
+    # Get training names by excluding test and validation names
     train_names = [item for item in dirs if item not in test_names]
     train_names = [item for item in train_names if item not in valid_names]
 
-    """ Training data """
+    # Load training data
     train_x, train_y = [], []
     for name in train_names:
         x, y = get_data(path, name)
         train_x += x
         train_y += y
 
-    """ Validation data """
+    # Load validation data
     valid_x, valid_y = [], []
     for name in valid_names:
         x, y = get_data(path, name)
         valid_x += x
         valid_y += y
 
-    """ Testing data """
+    # Load testing data
     test_x, test_y = [], []
     for name in test_names:
         x, y = get_data(path, name)
@@ -55,7 +71,18 @@ def load_data(path):
     return [(train_x, train_y), (valid_x, valid_y), (test_x, test_y)]
 
 class DATASET(Dataset):
+    """
+    Custom Dataset class for loading and preprocessing images and masks
+    """
     def __init__(self, images_path, masks_path, size, transform=None):
+        """
+        Initialize dataset
+        Args:
+            images_path: List of paths to input images
+            masks_path: List of paths to mask images
+            size: Target size for resizing images
+            transform: Optional albumentations transforms for data augmentation
+        """
         super().__init__()
 
         self.images_path = images_path
@@ -65,31 +92,54 @@ class DATASET(Dataset):
         self.n_samples = len(images_path)
 
     def __getitem__(self, index):
-        """ Image """
+        """
+        Get a single sample from the dataset
+        Args:
+            index: Index of the sample to get
+        Returns:
+            Tuple of (preprocessed_image, preprocessed_mask)
+        """
+        # Load image and mask
         image = cv2.imread(self.images_path[index], cv2.IMREAD_COLOR)
         mask = cv2.imread(self.masks_path[index], cv2.IMREAD_GRAYSCALE)
 
+        # Apply data augmentation if specified
         if self.transform is not None:
             augmentations = self.transform(image=image, mask=mask)
             image = augmentations["image"]
             mask = augmentations["mask"]
 
+        # Preprocess image
         image = cv2.resize(image, self.size)
-        image = np.transpose(image, (2, 0, 1))
-        image = image/255.0
+        image = np.transpose(image, (2, 0, 1))  # Convert to (C, H, W) format
+        image = image/255.0  # Normalize to [0, 1]
 
+        # Preprocess mask
         mask = cv2.resize(mask, self.size)
-        mask = np.expand_dims(mask, axis=0)
-        mask = mask/255.0
+        mask = np.expand_dims(mask, axis=0)  # Add channel dimension
+        mask = mask/255.0  # Normalize to [0, 1]
 
         return image, mask
 
     def __len__(self):
+        """Return the total number of samples in the dataset"""
         return self.n_samples
 
 def train(model, loader, optimizer, loss_fn, device):
+    """
+    Training function for one epoch
+    Args:
+        model: The neural network model
+        loader: DataLoader for training data
+        optimizer: Optimizer for updating model parameters
+        loss_fn: Loss function
+        device: Device to run the model on (CPU/GPU)
+    Returns:
+        Tuple of (epoch_loss, [epoch_jac, epoch_f1, epoch_recall, epoch_precision])
+    """
     model.train()
 
+    # Initialize metrics
     epoch_loss = 0.0
     epoch_jac = 0.0
     epoch_f1 = 0.0
@@ -97,17 +147,21 @@ def train(model, loader, optimizer, loss_fn, device):
     epoch_precision = 0.0
 
     for i, (x, y) in enumerate(loader):
+        # Move data to device
         x = x.to(device, dtype=torch.float32)
         y = y.to(device, dtype=torch.float32)
 
+        # Forward pass
         optimizer.zero_grad()
         p1, p2 = model(x)
         loss = loss_fn(p1, y) + loss_fn(p2, y)
+        
+        # Backward pass
         loss.backward()
         optimizer.step()
         epoch_loss += loss.item()
 
-        """ Calculate the metrics """
+        # Calculate metrics for each batch
         batch_jac = []
         batch_f1 = []
         batch_recall = []
@@ -120,11 +174,13 @@ def train(model, loader, optimizer, loss_fn, device):
             batch_recall.append(score[2])
             batch_precision.append(score[3])
 
+        # Update epoch metrics
         epoch_jac += np.mean(batch_jac)
         epoch_f1 += np.mean(batch_f1)
         epoch_recall += np.mean(batch_recall)
         epoch_precision += np.mean(batch_precision)
 
+    # Calculate average metrics for the epoch
     epoch_loss = epoch_loss/len(loader)
     epoch_jac = epoch_jac/len(loader)
     epoch_f1 = epoch_f1/len(loader)
@@ -134,9 +190,19 @@ def train(model, loader, optimizer, loss_fn, device):
     return epoch_loss, [epoch_jac, epoch_f1, epoch_recall, epoch_precision]
 
 def evaluate(model, loader, loss_fn, device):
+    """
+    Evaluation function for one epoch
+    Args:
+        model: The neural network model
+        loader: DataLoader for validation/test data
+        loss_fn: Loss function
+        device: Device to run the model on (CPU/GPU)
+    Returns:
+        Tuple of (epoch_loss, [epoch_jac, epoch_f1, epoch_recall, epoch_precision])
+    """
     model.eval()
 
-    epoch_loss = 0
+    # Initialize metrics
     epoch_loss = 0.0
     epoch_jac = 0.0
     epoch_f1 = 0.0
@@ -145,14 +211,16 @@ def evaluate(model, loader, loss_fn, device):
 
     with torch.no_grad():
         for i, (x, y) in enumerate(loader):
+            # Move data to device
             x = x.to(device, dtype=torch.float32)
             y = y.to(device, dtype=torch.float32)
 
+            # Forward pass
             p1, p2 = model(x)
             loss = loss_fn(p1, y) + loss_fn(p2, y)
             epoch_loss += loss.item()
 
-            """ Calculate the metrics """
+            # Calculate metrics for each batch
             batch_jac = []
             batch_f1 = []
             batch_recall = []
@@ -165,11 +233,13 @@ def evaluate(model, loader, loss_fn, device):
                 batch_recall.append(score[2])
                 batch_precision.append(score[3])
 
+            # Update epoch metrics
             epoch_jac += np.mean(batch_jac)
             epoch_f1 += np.mean(batch_f1)
             epoch_recall += np.mean(batch_recall)
             epoch_precision += np.mean(batch_precision)
 
+        # Calculate average metrics for the epoch
         epoch_loss = epoch_loss/len(loader)
         epoch_jac = epoch_jac/len(loader)
         epoch_f1 = epoch_f1/len(loader)
@@ -179,13 +249,13 @@ def evaluate(model, loader, loss_fn, device):
         return epoch_loss, [epoch_jac, epoch_f1, epoch_recall, epoch_precision]
 
 if __name__ == "__main__":
-    """ Seeding """
+    # Set random seed for reproducibility
     seeding(42)
 
-    """ Directories """
+    # Create necessary directories
     create_dir("files")
 
-    """ Training logfile """
+    # Setup training log file
     train_log_path = "files/train_log.txt"
     if os.path.exists(train_log_path):
         print("Log file exists")
@@ -194,12 +264,12 @@ if __name__ == "__main__":
         train_log.write("\n")
         train_log.close()
 
-    """ Record Date & Time """
+    # Record training start time
     datetime_object = str(datetime.datetime.now())
     print_and_save(train_log_path, datetime_object)
     print("")
 
-    """ Hyperparameters """
+    # Define hyperparameters
     image_size = 256
     size = (image_size, image_size)
     batch_size = 16
@@ -209,32 +279,34 @@ if __name__ == "__main__":
     checkpoint_path = "files/checkpoint.pth"
     path = "../../Task03_Liver"
 
+    # Log hyperparameters
     data_str = f"Image Size: {size}\nBatch Size: {batch_size}\nLR: {lr}\nEpochs: {num_epochs}\n"
     data_str += f"Early Stopping Patience: {early_stopping_patience}\n"
     print_and_save(train_log_path, data_str)
 
-    """ Dataset """
+    # Load and prepare dataset
     (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(path)
     train_x, train_y = shuffling(train_x, train_y)
 
+    # Limit dataset size for faster training (optional)
     train_x = train_x[:500]
     train_y = train_y[:500]
-
     valid_x = valid_x[:500]
     valid_y = valid_y[:500]
 
+    # Log dataset sizes
     data_str = f"Dataset Size:\nTrain: {len(train_x)} - Valid: {len(valid_x)} - Test: {len(test_x)}\n"
     print_and_save(train_log_path, data_str)
 
-    """ Data augmentation: Transforms """
-    transform =  A.Compose([
+    # Define data augmentation transforms
+    transform = A.Compose([
         A.Rotate(limit=35, p=0.3),
         A.HorizontalFlip(p=0.3),
         A.VerticalFlip(p=0.3),
         A.CoarseDropout(p=0.3, max_holes=10, max_height=32, max_width=32)
     ])
 
-    """ Dataset and loader """
+    # Create datasets and dataloaders
     train_dataset = DATASET(train_x, train_y, size, transform=transform)
     valid_dataset = DATASET(valid_x, valid_y, size, transform=None)
 
