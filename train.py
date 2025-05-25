@@ -30,58 +30,94 @@ def find_dataset_folder(base_path="datasets"):
 
 DATASET_PATH = find_dataset_folder()
 
+# def load_data(path):
+#     """
+#     Load and organize dataset into train, validation, and test sets
+#     Args:
+#         path: Path to the dataset directory
+#     Returns:
+#         Tuple of (train_data, valid_data, test_data) where each is a tuple of (images, masks)
+#     """
+#     def get_data(path, name):
+#         """
+#         Get image and mask paths for a specific dataset split
+#         Args:
+#             path: Base path to dataset
+#             name: Name of the dataset split
+#         Returns:
+#             Tuple of (image_paths, mask_paths)
+#         """
+#         images = sorted(glob(os.path.join(path, name, "images", "*.jpg")))
+#         labels = sorted(glob(os.path.join(path, name, "masks", "liver", "*.jpg")))
+#         return images, labels
+
+#     # Define dataset splits
+#     dirs = sorted(os.listdir(path))
+#     test_names = [f"liver_{i}" for i in range(0, 30, 1)]
+#     valid_names = [f"liver_{i}" for i in range(30, 60, 1)]
+
+#     # Get training names by excluding test and validation names
+#     train_names = [item for item in dirs if item not in test_names]
+#     train_names = [item for item in train_names if item not in valid_names]
+
+#     # Load training data
+#     train_x, train_y = [], []
+#     for name in train_names:
+#         x, y = get_data(path, name)
+#         train_x += x
+#         train_y += y
+
+#     # Load validation data
+#     valid_x, valid_y = [], []
+#     for name in valid_names:
+#         x, y = get_data(path, name)
+#         valid_x += x
+#         valid_y += y
+
+#     # Load testing data
+#     test_x, test_y = [], []
+#     for name in test_names:
+#         x, y = get_data(path, name)
+#         test_x += x
+#         test_y += y
+
+#     return [(train_x, train_y), (valid_x, valid_y), (test_x, test_y)]
+
 def load_data(path):
     """
-    Load and organize dataset into train, validation, and test sets
-    Args:
-        path: Path to the dataset directory
+    Load and split dataset into train, validation, and test sets.
+    Assumes structure:
+        path/
+        ├── images/
+        └── masks/
     Returns:
-        Tuple of (train_data, valid_data, test_data) where each is a tuple of (images, masks)
+        (train_x, train_y), (valid_x, valid_y), (test_x, test_y)
     """
-    def get_data(path, name):
-        """
-        Get image and mask paths for a specific dataset split
-        Args:
-            path: Base path to dataset
-            name: Name of the dataset split
-        Returns:
-            Tuple of (image_paths, mask_paths)
-        """
-        images = sorted(glob(os.path.join(path, name, "images", "*.jpg")))
-        labels = sorted(glob(os.path.join(path, name, "masks", "liver", "*.jpg")))
-        return images, labels
+    image_paths = sorted(glob(os.path.join(path, "images", "*.jpg")))
+    mask_paths = sorted(glob(os.path.join(path, "masks", "*.jpg")))
 
-    # Define dataset splits
-    dirs = sorted(os.listdir(path))
-    test_names = [f"liver_{i}" for i in range(0, 30, 1)]
-    valid_names = [f"liver_{i}" for i in range(30, 60, 1)]
+    assert len(image_paths) == len(mask_paths) and len(image_paths) > 0, \
+        "❌ Dataset error: images and masks must exist and match!"
 
-    # Get training names by excluding test and validation names
-    train_names = [item for item in dirs if item not in test_names]
-    train_names = [item for item in train_names if item not in valid_names]
+    # Shuffle the data
+    combined = list(zip(image_paths, mask_paths))
+    random.shuffle(combined)
+    image_paths, mask_paths = zip(*combined)
 
-    # Load training data
-    train_x, train_y = [], []
-    for name in train_names:
-        x, y = get_data(path, name)
-        train_x += x
-        train_y += y
+    total = len(image_paths)
+    train_split = int(0.8 * total)
+    valid_split = int(0.9 * total)
 
-    # Load validation data
-    valid_x, valid_y = [], []
-    for name in valid_names:
-        x, y = get_data(path, name)
-        valid_x += x
-        valid_y += y
+    train_x = list(image_paths[:train_split])
+    train_y = list(mask_paths[:train_split])
 
-    # Load testing data
-    test_x, test_y = [], []
-    for name in test_names:
-        x, y = get_data(path, name)
-        test_x += x
-        test_y += y
+    valid_x = list(image_paths[train_split:valid_split])
+    valid_y = list(mask_paths[train_split:valid_split])
 
-    return [(train_x, train_y), (valid_x, valid_y), (test_x, test_y)]
+    test_x = list(image_paths[valid_split:])
+    test_y = list(mask_paths[valid_split:])
+
+    return (train_x, train_y), (valid_x, valid_y), (test_x, test_y)
 
 class DATASET(Dataset):
     """
@@ -290,7 +326,7 @@ if __name__ == "__main__":
     lr = 1e-4
     early_stopping_patience = 50
     checkpoint_path = "files/checkpoint.pth"
-    path = DATASET
+    path = DATASET_PATH
 
     # Log hyperparameters
     data_str = f"Image Size: {size}\nBatch Size: {batch_size}\nLR: {lr}\nEpochs: {num_epochs}\n"
