@@ -13,6 +13,21 @@ from utils import create_dir, seeding
 from utils import calculate_metrics, otsu_mask
 from train import load_data
 
+def find_dataset_folder(base_path="datasets"):
+    """
+    Automatically detect the first dataset folder containing 'images/' and 'masks/'.
+    """
+    for folder_name in os.listdir(base_path):
+        folder_path = os.path.join(base_path, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+        if os.path.exists(os.path.join(folder_path, "images")) and os.path.exists(os.path.join(folder_path, "masks")):
+            print(f"✅ Dataset found: {folder_path}")
+            return folder_path
+    raise Exception("❌ No valid dataset found in 'datasets/'. Please upload a folder with 'images/' and 'masks/'.")
+
+
+
 def process_mask(y_pred):
     """
     Process the predicted mask for visualization
@@ -151,8 +166,16 @@ if __name__ == "__main__":
     model.eval()
 
     # Load test dataset
-    path = "../../Task03_Liver"
-    (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(path)
+    # path = "../../Task03_Liver"
+    # (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_data(path)
+
+    DATASET_PATH = find_dataset_folder()
+
+    test_x = sorted(glob(os.path.join(DATASET_PATH, "images", "*")))
+    test_y = sorted(glob(os.path.join(DATASET_PATH, "masks", "*")))
+
+    print(f"Testing on {len(test_x)} images from: {DATASET_PATH}")
+
 
     # Create directories for saving results
     save_path = f"results"

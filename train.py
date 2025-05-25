@@ -17,6 +17,19 @@ from utils import seeding, create_dir, print_and_save, shuffling, epoch_time, ca
 from model import build_doubleunet
 from metrics import DiceLoss, DiceBCELoss
 
+def find_dataset_folder(base_path="datasets"):
+    """Finds the first folder that contains both 'images/' and 'masks/' inside the datasets directory"""
+    for folder_name in os.listdir(base_path):
+        folder_path = os.path.join(base_path, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+        if os.path.exists(os.path.join(folder_path, "images")) and os.path.exists(os.path.join(folder_path, "masks")):
+            print(f"✅ Detected dataset: {folder_path}")
+            return folder_path
+    raise Exception("❌ No valid dataset found in 'datasets/'. Please upload a folder with 'images/' and 'masks/'.")
+
+DATASET_PATH = find_dataset_folder()
+
 def load_data(path):
     """
     Load and organize dataset into train, validation, and test sets
@@ -277,7 +290,7 @@ if __name__ == "__main__":
     lr = 1e-4
     early_stopping_patience = 50
     checkpoint_path = "files/checkpoint.pth"
-    path = "../../Task03_Liver"
+    path = DATASET
 
     # Log hyperparameters
     data_str = f"Image Size: {size}\nBatch Size: {batch_size}\nLR: {lr}\nEpochs: {num_epochs}\n"
@@ -289,10 +302,10 @@ if __name__ == "__main__":
     train_x, train_y = shuffling(train_x, train_y)
 
     # Limit dataset size for faster training (optional)
-    train_x = train_x[:500]
-    train_y = train_y[:500]
-    valid_x = valid_x[:500]
-    valid_y = valid_y[:500]
+    # train_x = train_x[:500]
+    # train_y = train_y[:500]
+    # valid_x = valid_x[:500]
+    # valid_y = valid_y[:500]
 
     # Log dataset sizes
     data_str = f"Dataset Size:\nTrain: {len(train_x)} - Valid: {len(valid_x)} - Test: {len(test_x)}\n"
