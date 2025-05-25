@@ -322,7 +322,7 @@ if __name__ == "__main__":
     image_size = 256
     size = (image_size, image_size)
     batch_size = 16
-    num_epochs = 500
+    num_epochs = 30
     lr = 1e-4
     early_stopping_patience = 50
     checkpoint_path = "files/checkpoint.pth"
