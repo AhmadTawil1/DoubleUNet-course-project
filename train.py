@@ -324,8 +324,9 @@ if __name__ == "__main__":
     batch_size = 16
     num_epochs = 30
     lr = 1e-4
-    early_stopping_patience = 50
+    early_stopping_patience = 15
     checkpoint_path = "files/checkpoint.pth"
+    min_delta = 0.001
     path = DATASET_PATH
 
     # Log hyperparameters
@@ -397,15 +398,27 @@ if __name__ == "__main__":
         scheduler.step(valid_loss)
 
         if valid_metrics[1] > best_valid_metrics:
+            
+            torch.save(model.state_dict(), checkpoint_path)
             data_str = f"Valid F1 improved from {best_valid_metrics:2.4f} to {valid_metrics[1]:2.4f}. Saving checkpoint: {checkpoint_path}"
             print_and_save(train_log_path, data_str)
 
-            best_valid_metrics = valid_metrics[1]
-            torch.save(model.state_dict(), checkpoint_path)
-            early_stopping_count = 0
+            if valid_metrics[1] > best_valid_metrics + min_delta:
+                early_stopping_count = 0
+                data_str = f"Significant improvement (ΔF1 > {min_delta}) — patience reset"
+            else:
+                early_stopping_count += 1
+                data_str = f"Tiny improvement (ΔF1 < {min_delta}) — Count: {early_stopping_count}/{early_stopping_patience}"
 
-        elif valid_metrics[1] < best_valid_metrics:
+            best_valid_metrics = valid_metrics[1]
+            print_and_save(train_log_path, data_str)
+            # torch.save(model.state_dict(), checkpoint_path)
+            # early_stopping_count = 0
+
+        else: #elif valid_metrics[1] < best_valid_metrics:
             early_stopping_count += 1
+            data_str = f"No improvement — count = {early_stopping_count}/{early_stopping_patience}"
+            print_and_save(train_log_path, data_str)
 
         end_time = time.time()
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)

@@ -75,7 +75,7 @@ class ASPP(nn.Module):
         in_c: Number of input channels
         out_c: Number of output channels
     """
-    def __init__(self, in_c, out_c):
+    def __init__(self, in_c, out_c): # in_c=512, out_c=64
         super().__init__()
 
         # Global average pooling branch
@@ -89,6 +89,11 @@ class ASPP(nn.Module):
         self.c2 = Conv2D(in_c, out_c, kernel_size=3, padding=6, dilation=6)
         self.c3 = Conv2D(in_c, out_c, kernel_size=3, padding=12, dilation=12)
         self.c4 = Conv2D(in_c, out_c, kernel_size=3, padding=18, dilation=18)
+        # output = (Input + 2*padding - dialation * (kernel_size - 1) - 1) / stride + 1
+        # c1 = (16 + 2*0 - 1 * (1 - 1) - 1) / 1 + 1 = 16, 
+        # c2 = (16 + 2*6 - 6 * (3 - 1) - 1) / 1 + 1 = 16, 
+        # c3 = (16 + 2*12 - 12 * (3 - 1) - 1) / 1 + 1 = 16, 
+        # c4 = (16 + 2*18 - 18 * (3 - 1) - 1) / 1 + 1 = 16
 
         # Final 1x1 convolution to combine all branches
         self.c5 = Conv2D(out_c*5, out_c, kernel_size=1, padding=0, dilation=1)
@@ -154,6 +159,8 @@ class encoder1(nn.Module):
         x4 = self.x4(x3)
         x5 = self.x5(x4)
         return x5, [x4, x3, x2, x1]
+    # output = (input + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1
+    # Conv Layer Formula = (H + 2P - K) / S + 1
 
 class decoder1(nn.Module):
     """
@@ -168,7 +175,7 @@ class decoder1(nn.Module):
         self.c1 = conv_block(64+512, 256)
         self.c2 = conv_block(512, 128)
         self.c3 = conv_block(256, 64)
-        self.c4 = conv_block(128, 32)
+        self.c4 = conv_block(128, 32)  
 
     def forward(self, x, skip):
         s1, s2, s3, s4 = skip
@@ -303,7 +310,8 @@ class build_doubleunet(nn.Module):
 
 # Test code to verify model architecture
 if __name__ == "__main__":
-    x = torch.randn((8, 3, 256, 256))
+
+    x = torch.randn((1, 3, 256, 256))
     model = build_doubleunet()
     y1, y2 = model(x)
     print(y1.shape, y2.shape)
