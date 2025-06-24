@@ -171,8 +171,7 @@ if __name__ == "__main__":
 
     DATASET_PATH = find_dataset_folder()
 
-    test_x = sorted(glob(os.path.join(DATASET_PATH, "images", "*")))
-    test_y = sorted(glob(os.path.join(DATASET_PATH, "masks", "*")))
+    _, _, (test_x, test_y) = load_data(DATASET_PATH)
 
     print(f"Testing on {len(test_x)} images from: {DATASET_PATH}")
 
